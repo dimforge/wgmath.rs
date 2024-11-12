@@ -1,0 +1,30 @@
+---
+id: about_wgmath
+title: About wgmath
+sidebar_label: About wgmath
+slug: /
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+**wgmath** is a set of [Rust](https://www.rust-lang.org/) libraries exposing re-usable GPU shaders for scientific computing including:
+- Linear algebra.
+- AI (Large Language Models).
+- Collision-detection.
+- Rigid-body physics.
+- Non-rigid physics.
+By targeting WebGPU, these libraries run on most GPUs, including on mobile and on the web. It aims to promote open and
+cross-platform GPU computing for scientific applications, a field currently strongly dominated by proprietary solutions
+(like CUDA).
+
+All of the libraries are still under heavy development and might be lacking some important features. Contributions are
+welcome!
+
+The **wgcore** crate part of the **wgmath** ecosystem exposes a set of proc-macros to facilitate sharing and composing
+shaders across Rust libraries.
+
+**wgmath** is developed by the [Dimforge](https://dimforge.com) open-source company. You can support us by sponsoring us
+on [GitHub sponsor](https://github.com/sponsors/dimforge).
+
+![dimforge_logo](https://www.dimforge.com/img/logo/logo_dimforge_full)
