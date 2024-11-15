@@ -28,7 +28,7 @@ Uncompressed, the `.wasm` file from wgsparkl2d demo weighs ~40 MB ; after wasm-o
 
 We can go further by serving a compressed wasm file: using brotli reduces the size to ~5.6MB :tada:.
 
-Now serving compressed wasm is not totally trivial, so I'll detail our current setup below:
+Now serving compressed wasm is not totally trivial, so our current setup is detailed below:
 
 Manual steps:
 - compress `.wasm` with brotli
@@ -40,11 +40,11 @@ Automatic steps:
 
 ## To test locally:
 
-- You can use apache locally to approach the server environment
+- You can use apache locally to approach the server environment.
 - Rewrite rules will get in the way, you can remove them temporarily.
 - If you use a subfolder of your apache's `www` ; website will complain about docusaurus' `baseUrl`,
   which you can update, but it's not relevant to test wasm files.
-- local apache doesn't allow .htaccess by default ; you can enable it within your apached2.conf with `AllowOverride All` for your directory.
+- Local apache doesn't allow .htaccess by default ; you can enable it within your apached2.conf with `AllowOverride All` for your directory.
 
 Your browser might not be compatible, at the time of writing, chrome is most likely to support the demos, and the following flags might be relevant:
 
