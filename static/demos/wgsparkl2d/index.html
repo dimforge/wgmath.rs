@@ -3,13 +3,38 @@
 
 <body style="margin: 0px;">
     <script type="module">
-        import init from './elasticity2.js'
+        function displayErrorHTML(message) {
+            const messageContainer = document.createElement("div");
+            messageContainer.style.color = "red";
+            messageContainer.style.fontWeight = "bold";
+            messageContainer.style.margin = "20px";
+            messageContainer.innerHTML = message;
+            document.body.appendChild(messageContainer);
+        }
 
-        init().catch((error) => {
-            if (!error.message.startsWith("Using exceptions for control flow, don't mind me. This isn't actually an error!")) {
-                throw error;
+        async function load_demo() {
+            if (!navigator.gpu) {
+                displayErrorHTML("WebGPU not supported. <a href='https://caniuse.com/webgpu'>More info</a>")
+                throw Error("WebGPU not supported.");
             }
-        });
+
+            const adapter = await navigator.gpu.requestAdapter();
+            if (!adapter) {
+                displayErrorHTML("Couldn't request WebGPU adapter. <a href='https://caniuse.com/webgpu'>More info</a>")
+                throw Error("Couldn't request WebGPU adapter.");
+            }
+
+            // Dynamically import the module only if WebGPU is compatible
+            const { default: init } = await import('./elasticity2.js');
+
+            // Initialize the module
+            await init().catch((error) => {
+                if (!error.message.startsWith("Using exceptions for control flow, don't mind me. This isn't actually an error!")) {
+                    throw error;
+                }
+            });
+        }
+        load_demo();
     </script>
 </body>
 
