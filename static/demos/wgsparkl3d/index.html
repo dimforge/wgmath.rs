@@ -4,23 +4,50 @@
 <body style="margin: 0px;">
     <script type="module">
         function displayErrorHTML(message) {
+            var styles = `
+    body {
+        height: 100dvh;
+        display: flex;
+    }
+    .error-red {
+        color: red;
+    }
+    .error {
+        margin: auto;
+        width: 100%;
+        padding: 10px;
+        text-align: center;
+    }
+`;
+            var styleSheet = document.createElement("style")
+            styleSheet.textContent = styles
+            document.head.appendChild(styleSheet);
+
+            var oImg = document.createElement("img");
+            oImg.setAttribute('src', '../../img/wgmath_logo.svg');
+            oImg.setAttribute("class", "error");
+            oImg.style.maxHeight = '200px';
+            oImg.style.maxWidth = '400px';
+
             const messageContainer = document.createElement("div");
-            messageContainer.style.color = "red";
-            messageContainer.style.fontWeight = "bold";
-            messageContainer.style.margin = "20px";
-            messageContainer.innerHTML = message;
+            messageContainer.setAttribute("class", "error");
+            messageContainer.appendChild(oImg);
+            messageContainer.innerHTML += message;
             document.body.appendChild(messageContainer);
         }
 
         async function load_demo() {
+            let user_facing_error = "<p class=error-red><strong>WebGPU is not supported on this browser.</strong></p>\
+                <p>See <a href='https://caniuse.com/webgpu'>caniuse.com</a> for a list of compatible browsers.</p>";
             if (!navigator.gpu) {
-                displayErrorHTML("WebGPU not supported. <a href='https://caniuse.com/webgpu'>More info</a>")
+
+                displayErrorHTML(user_facing_error)
                 throw Error("WebGPU not supported.");
             }
 
             const adapter = await navigator.gpu.requestAdapter();
             if (!adapter) {
-                displayErrorHTML("Couldn't request WebGPU adapter. <a href='https://caniuse.com/webgpu'>More info</a>")
+                displayErrorHTML(user_facing_error)
                 throw Error("Couldn't request WebGPU adapter.");
             }
 
