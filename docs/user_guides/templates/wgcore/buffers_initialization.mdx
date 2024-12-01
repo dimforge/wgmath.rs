@@ -1,0 +1,125 @@
+---
+id: buffers_initialization
+title: Buffers initialization
+sidebar_label: Buffers initialization
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+:::note
+The code described in this section can be run from the
+[**encase.rs**](https://github.com/dimforge/wgmath/blob/main/crates/wgcore/examples/encase.rs) example with
+`cargo run --features derive --example encase`. Complete source code is also provided at the
+[end of this page](#complete-example).
+:::
+
+`wgcore` exposes some utilities to ease the creation and initialization of `wgpu::Buffer`. All the structs mentioned
+ below are actually aliases for the more general `GpuTensor` for a n-dimensional array of values:
+- `GpuScalar`: for a storage buffer with a single element.
+- `GpuVector`: for a 1-dimensional array of values.
+- `GpuMatrix`: for a 2-dimensional array of values.
+
+Initializing webgpu buffers can be tricky as the buffer layouts must match the layout of the corresponding struct
+defined on the WGSL shader. To facilitate the conversion between rust structure and raw bytes, `wgcore` can leverage
+either [`bytemuck`](https://crates.io/crates/bytemuck) or [`encase`](https://crates.io/crates/encase).
+
+## Initialization with `bytemuck`
+
+Initialization with `bytemuck` can be done using the `::init` constructor of `GpuScalar/GpuVector/GpuMatrix`.
+Note that not all types are capable of implementing the `bytemuck::Pod` trait due to alignment and padding restrictions.
+If you can’t derive `bytemuck::Pod` for your own type, consider the [solution based on `encase`](#initialization-with-encase).
+
+- If a type `T` implements the [`bytemuck::Pod`](https://docs.rs/bytemuck/latest/bytemuck/trait.Pod.html) trait,
+it can be passed to `GpuScalar::init`.
+- Any type implementing `AsRef<[T]>` (like `Vec<T>`, `&[T]`, or `DVector` from [`nalgebra`](https://nalgebra.rs) can be
+passed to `GpuVector::init`.
+- Any matrix type, parametrized by `T`, from the [`nalgebra`](https://nalgebra.rs) crate can
+be passed to `GpuMatrix::init`.
+
+```rust
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+#[repr(C)]
+pub struct BytemuckStruct {
+    value: f32,
+}
+
+#[async_std::main]
+async fn main() -> anyhow::Result<()> {
+    let gpu = GpuInstance::new().await?;
+    let data = (0..1000)
+        .map(|x| BytemuckStruct { value: x as f32 })
+        .collect::<Vec<_>>();
+    let gpu_buffer = GpuVector::init(gpu.device(), &data, BufferUsages::STORAGE);
+}
+```
+
+:::tip
+Initialization based on `bytemuck` will always be more efficient than [initializing with `encase`](#initialization-with-encase)
+as it involves absolutely zero overhead.
+:::
+
+## Initialization with `encase`
+
+If the structure cannot implement the `bytemuck::Pod` trait, it is possible to rely on the [`encase::ShaderType`] trait
+instead by calling the `::encase` constructor of `GpuScalar/GpuVector/GpuMatrix`.
+
+- If a type `T` implements the `encase` [`ShaderType`](https://docs.rs/encase/latest/encase/trait.ShaderType.html) trait,
+it can be passed to `GpuScalar::encase`.
+- Any type implementing `AsRef<[T]>` (like `Vec<T>`, `&[T]`, or `DVector` from [`nalgebra`](https://nalgebra.rs) can be
+passed to `GpuVector::encase`.
+- Any matrix type, parametrized by `T`, from the [`nalgebra`](https://nalgebra.rs) crate can
+be passed to `GpuMatrix::encase`.
+
+
+```rust
+#[derive(Copy, Clone, encase::ShaderType)]
+#[repr(C)]
+pub struct EncaseStruct {
+    value: f32,
+    // This implies some internal padding, so we can’t rely on bytemuck.
+    // Encase will handle that properly.
+    value2: Vector4<f32>,
+}
+
+#[async_std::main]
+async fn main() -> anyhow::Result<()> {
+    let gpu = GpuInstance::new().await?;
+    let a_data = (0..LEN)
+        .map(|x| EncaseStruct {
+            value: x as f32,
+            value2: Vector4::repeat(x as f32 * 10.0),
+        })
+    let gpu_buffer = GpuVector::encase(gpu.device(), &data, BufferUsages::STORAGE);
+}
+```
+
+:::danger
+The `::encase` function will result in an extra allocation and a conversion of all elements in the provided vector or
+matrix. Because of this overhead, it is recommended to [initialize with `bytemuck`](#initialization-with-bytemuck) whenever possible.
+:::
+
+## Complete example
+
+<Tabs
+groupId="wgcore"
+defaultValue="rust"
+values={[
+{label: 'main.rs', value: 'rust'},
+{label: 'kernel.wgsl', value: 'wgsl'},
+]}>
+<TabItem value="rust">
+
+```rust
+<load path='https://raw.githubusercontent.com/dimforge/wgmath/refs/heads/main/crates/wgcore/examples/encase.rs' />
+```
+
+  </TabItem>
+  <TabItem value="wgsl">
+
+```rust
+<load path='https://raw.githubusercontent.com/dimforge/wgmath/refs/heads/main/crates/wgcore/examples/encase.wgsl' />
+```
+
+  </TabItem>
+</Tabs>

@@ -1,0 +1,209 @@
+---
+id: shaders_composition
+title: Shaders composition
+sidebar_label: Shaders composition
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+:::note
+The code described in this section can be run from the
+[**compose.rs**](https://github.com/dimforge/wgmath/blob/main/crates/wgcore/examples/compose.rs) example with
+`cargo run --features derive --example compose`. Complete source code is also provided at the
+[end of this page](#complete-example).
+:::
+
+The main feature of `wgcore` is the provide the ability share and compose WGSL shaders easily across crates. Roughly
+speaking, `wgcore` exposes a trait and derive macro for generating the boilerplate needed by
+[`naga-oil`](https://crates.io/crates/naga_oil) for shader composition.
+
+This is achieved by mapping one shader (one `.wgsl` file) to one rust structure. That rust structure can then be used
+for creating any compute kernel present in the shader and/or for importing its content from another shader. Furthermore
+since it’s a regular rust `struct`, it can be exported and used across crates easily.
+
+## The `Shader` trait
+
+Say you have two `.wgsl` shaders, one `dependency.wgsl` exposing a wgsl structure and a mathematical function, and the other
+`kernel.wgsl` defines a compute pipeline entrypoint that calls functions from `dependency.wgsl`. The dependency shader
+contains a nana-oil `#define_import_path` statement indicating it is intended to be imported from other shaders. The
+kernel shaders contains an `#import` statement indicating it requires symbols exported by the dependency shader:
+
+<Tabs
+groupId="wgcore"
+defaultValue="wgsl"
+values={[
+{label: 'kernel.wgsl', value: 'wgsl'},
+{label: 'dependency.wgsl', value: 'wgsl_dependency'},
+]}>
+  <TabItem value="wgsl">
+
+```rust
+<load path='https://raw.githubusercontent.com/dimforge/wgmath/refs/heads/main/crates/wgcore/examples/compose_kernel.wgsl' />
+```
+
+  </TabItem>
+    <TabItem value="wgsl_dependency">
+
+  ```rust
+<load path='https://raw.githubusercontent.com/dimforge/wgmath/refs/heads/main/crates/wgcore/examples/compose_dependency.wgsl' />
+  ```
+
+    </TabItem>
+</Tabs>
+
+On the rust side, a structure can be associated to each shader by deriving the `Shader` trait. For `dependency.wgsl`,
+the derive is fairly straightforward. Note that the path to the `.wgsl` file (relative to the `.rs` source file) needs
+to be provided.
+
+```rust
+#[derive(Shader)]
+#[shader(
+    src = "dependency.wgsl"
+)]
+struct Composable;
+```
+
+:::info
+The shader file indicated with `shader(src = ...)` will be embedded in the crate/executable so there is no need for
+any additional action to package the `.wgsl` asset file.
+:::
+
+
+For the shader containing the compute pipeline entrypoint, a few more attributes are needed:
+- `shader(derive(Composable))` indicates that our `kernel.wgsl` shader depends on the source code of the shader
+  associated to the `Composable` structure. All the `naga_oil` boilerplace to compose the `.wgsl` modules will be
+  generated automatically. Note that multiple dependencies can be specified when needed, e.g., `derive(Composable1, Composable2)`.
+- `shader(composable = false)` indicates that `WgKernel` cannot be reused as a dependency of another shader. In practice
+  this is required if the `.wgsl` file does not contain a `#define_import_path` line.
+
+```rust
+#[derive(Shader)]
+#[shader(
+    derive(Composable), // This shader depends on the `Composable` shader.
+    src = "kernel.wgsl", // Shader source code, will be embedded in the exe with `include_str!`.
+    composable = false // This shader doesn’t export any symbols reusable from other wgsl shaders.
+)]
+struct WgKernel {
+    main: ComputePipeline,
+}
+```
+
+Our compute shader also defines an entrypoint for a compute pipeline. Here, the entrypoint is named `main` in the `.wgsl`
+sources. By specifying a field `main: ComputePipeline` in the rust struct, the `Shader` derive will automatically generate
+the boilerplate to instantiate this compute pipeline with `WgKernel::from_device(wgpu_device)`.
+
+:::danger
+If a `.wgsl` file does **not** contain a `#define_import_path` line, the `composable = false` attribute **must** be added
+to avoid a compile-time error.
+:::
+
+With these associations between Rust structs and `.wgsl` shaders in place, we can now instantiate the compute pipeline
+easily without any additional boilerplace:
+
+```rust
+#[async_std::main]
+async fn main() -> anyhow::Result<()> {
+    let gpu = GpuInstance::new().await?; // Helper to initialize the GPU device and queue.
+    let kernel = WgKernel::from_device(gpu.device())?; // Initialize the compute pipeline
+    println!("{}", WgKernel::flat_wgsl()?); // Prints the source code of your kernel after all dependency resolution.
+}
+```
+This prints the following "flattened" shader. This is what is actually being compiled by `naga`:
+
+```rust
+struct MyStructX_naga_oil_mod_XMNXW24DPONQWE3DFHI5G233EOVWGKX {
+    value: f32,
+}
+
+@group(0) @binding(0)
+var<storage, read_write> a_1: array<MyStructX_naga_oil_mod_XMNXW24DPONQWE3DFHI5G233EOVWGKX>;
+@group(0) @binding(1)
+var<storage> b_1: array<MyStructX_naga_oil_mod_XMNXW24DPONQWE3DFHI5G233EOVWGKX>;
+
+fn shared_functionX_naga_oil_mod_XMNXW24DPONQWE3DFHI5G233EOVWGKX(a: MyStructX_naga_oil_mod_XMNXW24DPONQWE3DFHI5G233EOVWGKX, b: MyStructX_naga_oil_mod_XMNXW24DPONQWE3DFHI5G233EOVWGKX) -> MyStructX_naga_oil_mod_XMNXW24DPONQWE3DFHI5G233EOVWGKX {
+    return MyStructX_naga_oil_mod_XMNXW24DPONQWE3DFHI5G233EOVWGKX((a.value + b.value));
+}
+
+@compute @workgroup_size(64, 1, 1)
+fn main(@builtin(global_invocation_id) invocation_id: vec3<u32>) {
+    let i: u32 = invocation_id.x;
+    if (i < arrayLength((&a_1))) {
+        let _e9: MyStructX_naga_oil_mod_XMNXW24DPONQWE3DFHI5G233EOVWGKX = a_1[i];
+        let _e12: MyStructX_naga_oil_mod_XMNXW24DPONQWE3DFHI5G233EOVWGKX = b_1[i];
+        let _e13: MyStructX_naga_oil_mod_XMNXW24DPONQWE3DFHI5G233EOVWGKX = shared_functionX_naga_oil_mod_XMNXW24DPONQWE3DFHI5G233EOVWGKX(_e9, _e12);
+        a_1[i] = _e13;
+        return;
+    } else {
+        return;
+    }
+}
+```
+
+:::info
+Your output will differ from this one due to various factors like different UUID generation and different versions of
+`naga`, `naga_oil`, `wgpu`, and `wgcore`.
+:::
+
+## Running the kernel
+
+In addition to initializing the compute pipeline, `wgcore` exports some convenient utilities for actually running it.
+First, the input buffers can be initialized easily using the `GpuScalar`, `GpuVector`, `GpuMatrix` wrappers (the all
+initialize and contain a regular wgpu `Buffer`).
+
+```rust
+let a = GpuVector::init(gpu.device(), &[1.0, 2.0, 3.0], BufferUsages::STORAGE);
+let b = GpuVector::init(gpu.device(), &[4.0, 5.0, 6.0], BufferUsages::STORAGE);
+```
+
+Then we can bind and queue the compute pipeline with these inputs using the `KernelInvocationBuilder`:
+```rust
+let mut queue = KernelInvocationQueue::new(gpu.device());
+KernelInvocationBuilder::new(&mut queue, &kernel.main)
+    .bind0([a.buffer(), b.buffer()]) // Bind the buffers in group 0.
+    .queue(LEN.div_ceil(64)); // Divide by 64, the workgroup size.
+```
+
+Finally, we encode the queue and submit the calculation to the gpu:
+```rust
+let mut encoder = gpu.device().create_command_encoder(&Default::default());
+queue.encode(&mut encoder, None);
+gpu.queue().submit(Some(encoder.finish()));
+```
+
+:::tip
+The complete example below also includes some elements to read the result back to RAM and prints it to the console.
+:::
+
+## Complete example
+
+<Tabs
+groupId="wgcore"
+defaultValue="rust"
+values={[
+{label: 'main.rs', value: 'rust'},
+{label: 'kernel.wgsl', value: 'wgsl'},
+{label: 'dependency.wgsl', value: 'wgsl_dependency'},
+]}>
+<TabItem value="rust">
+
+```rust
+<load path='https://raw.githubusercontent.com/dimforge/wgmath/refs/heads/main/crates/wgcore/examples/compose.rs' />
+```
+
+  </TabItem>
+  <TabItem value="wgsl">
+
+```rust
+<load path='https://raw.githubusercontent.com/dimforge/wgmath/refs/heads/main/crates/wgcore/examples/compose_kernel.wgsl' />
+```
+
+  </TabItem>
+    <TabItem value="wgsl_dependency">
+
+  ```rust
+<load path='https://raw.githubusercontent.com/dimforge/wgmath/refs/heads/main/crates/wgcore/examples/compose_dependency.wgsl' />
+  ```
+
+    </TabItem>
+</Tabs>

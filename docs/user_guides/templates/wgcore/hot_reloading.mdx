@@ -1,0 +1,89 @@
+---
+id: hot_reloading
+title: Hot-reloading
+sidebar_label: Hot-reloading
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+:::note
+The code described in this section can be run from the
+[**hot_reloading.rs**](https://github.com/dimforge/wgmath/blob/main/crates/wgcore/examples/hot_reloading.rs) example with
+`cargo run --features derive --example hot_reloading`. Complete source code is also provided at the
+[end of this page](#complete-example).
+:::
+
+Hot-reloading lets you edit and apply changes to your WGSL shaders while the application using them is running. This
+enables quick iterations and debugging on existing shaders without needing to rebuild and restart the application.
+When using `wgcore` (and its [`derive(Shader)`](./composing_shaders.mdx)) to associate a `.wgsl` file to a rust struct,
+it is possible to benefit from hot-reloading with very little boilerplate:
+
+```rust
+// Initialize the gpu device and queue.
+let gpu = GpuInstance::new().await?;
+// Detects file changes.
+let mut hot_reload = HotReloadState::new()?;
+// Register the shader for hot-reloading.
+MyShader::watch_sources(&mut hot_reload)?;
+// Instantiate the compute pipeline.
+let mut compute_pipeline = MyShader::from_device(gpu.device())?;
+
+// This can be, for example, your game loop or window event loop.
+loop {
+    // Detects file changes since the last call to `update_changes`.
+    hot_reload.update_changes();
+    // Reload the compute pipeline if it changed.
+    compute_pipeline.reload_if_changed(gpu.device(), &hot_reload);
+}
+```
+
+## How does this work?
+
+Say you are working on an application’s code (like, for example, one of the examples of
+[wgsparkl](https://github.com/dimforge/wgsparkl)), and depends on local version of its dependencies (like
+[wgebra](https://github.com/dimforge/wgmath)) using a [cargo patch](https://doc.rust-lang.org/cargo/reference/overriding-dependencies.html).
+Using the code snippet from the previous section, you can leverage hot-reloading on **any** shader, even the ones
+from the local dependencies. The `derive(Shader)` macros will automatically figure out the absolute path of all the
+shaders at compile-time so the can be watched with `Shader::watch_sources`.
+
+:::danger
+This automatic detection of shader paths might not work properly if you run your application from a directory that is
+different from the root of the rust workspace it is built from. This is due to some limitations in the Rust libraries
+that will hopefully be stabilized in future versions of the compiler.
+:::
+
+This won’t work for shaders of a dependency that is not available locally on your machine, since there is no way to
+actual shader file that could be modified (since they are embedded in the library directly). In order to make it work
+for these shaders, you can [overwrite them](./overwriting_shaders.mdx) with a local version of the shader by specifying
+their path with `Shader::set_wgsl_path`. After their path is overwritten, `Shader::watch_sources` needs to be called
+and hot-reloading will work.
+
+:::tip
+If your shader depends on other shaders with `shader(derive(...))`, then calling `Shader::watch_sources` on the
+top-level shader will automatically register all its dependencies as well for hot-reloading :fire:
+:::
+
+## Complete example
+<Tabs
+groupId="wgcore"
+defaultValue="rust"
+values={[
+{label: 'main.rs', value: 'rust'},
+{label: 'kernel.wgsl', value: 'wgsl'},
+]}>
+<TabItem value="rust">
+
+```rust
+<load path='https://raw.githubusercontent.com/dimforge/wgmath/refs/heads/main/crates/wgcore/examples/hot_reloading.rs' />
+```
+
+  </TabItem>
+  <TabItem value="wgsl">
+
+```rust
+<load path='https://raw.githubusercontent.com/dimforge/wgmath/refs/heads/main/crates/wgcore/examples/hot_reloading.wgsl' />
+```
+
+  </TabItem>
+</Tabs>

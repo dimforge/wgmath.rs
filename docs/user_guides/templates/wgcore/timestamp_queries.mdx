@@ -1,0 +1,110 @@
+---
+id: timestamp_queries
+title: Timestamp queries
+sidebar_label: Timestamp queries
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+:::note
+The code described in this section can be run from the
+[**timestamp_queries.rs**](https://github.com/dimforge/wgmath/blob/main/crates/wgcore/examples/timestamp_queries.rs) example with
+`cargo run --features derive --example timestamp_queries`. Complete source code is also provided at the
+[end of this page](#complete-example).
+:::
+
+:::danger Unstable feature
+Timestamp queries are a bit impractical to use at the moment. Their API is still being worked on.
+:::
+
+Timestamp queries aim to answer the question: "How long did this compute operation run on the GPU?" It is
+essentially a basic, occasionally unreliable, benchmarking tools that measure shader runtimes. This is achieved by:
+ 1. Instructing the GPU to insert timestamps at specific locations of the execution pipeline.
+ 2. Instructing the GPU to resolve the queries.
+ 3. Reading back the timestamp values from GPU memory to CPU land.
+ 4. Converting the timestamps to milliseconds and subtracting them to obtain the runtimes.
+
+ Platform support for timestamp queries can be very limited so it is advised to not abort the execution of your
+ application if they are not supported.
+
+:::info
+Be sure to enable the `wgpu::Features::TIMESTAMP_QUERY` feature when initializing your gpu device
+(in `DeviceDescriptor::required_features`).
+:::
+
+The `wgcore` crate exposes the [`GpuTimestamps`](https://docs.rs/wgcore/latest/wgcore/timestamps/struct.GpuTimestamps.html)
+structure that helps with all the four steps mentioned above:
+
+```rust
+// Initialize a query set that can contain up to 2 timestamps
+// (here we need only 2 timestamps since we are measuring a single compute pass).
+let mut timestamps = GpuTimestamps::new(gpu.device(), 2);
+
+// Initialize the invocation queue as usual.
+let mut queue = KernelInvocationQueue::new(gpu.device());
+
+// ## Step 1 ##
+// Start a compute pass with a custom name. The `true` indicates that timestamps
+// will have to be pushed for this pass.
+queue.compute_pass("timestamp_queries_test", true);
+
+// TODO: queue one or multiple kernels here.
+
+let mut encoder = gpu.device().create_command_encoder(&Default::default());
+
+// ## STEP 1 (bis) ##
+// When encoding the queue, pass the `GpuTimestamps` to actually create our timestamps.
+// Note that if `None` is given instead, timestamps will be ignored.
+queue.encode(&mut encoder, Some(&mut timestamps));
+
+// ## STEP 2 ##
+// Resolve the timestamp queries.
+timestamps.resolve(&mut encoder);
+
+// Submit the calculations.
+gpu.queue().submit(Some(encoder.finish()));
+
+// ## STEP 3 & 4 ##
+// Read back the timestamp values, in milliseconds.
+// The compute pass’s runtime is given by `timestamps_read[1] - timestamps_read[2]`.
+let timestamps_read = timestamps.wait_for_results_ms(gpu.device(), gpu.queue());
+```
+
+Each compute pass requires **2 timestamps** for measuring their runtime: one for when the pass _starts_, and one for when its
+_ends_. The actual runtime of the compute pass is the the difference between the two.
+
+Note that there is currently no way to know which timestamp is related to which compute pass unless you know exactly in
+which order all the calls to `queue.compute_pass` happened: their timestamps will be in the same order.
+
+
+:::note
+The examples in this page only work on a native program. On WASM, reading the timestamps from the gpu can be a bit more
+convoluted due the async nature of web platforms. See how it is being done in the [`wgsparkl`](https://github.com/dimforge/wgsparkl)
+crate as an example.
+:::
+
+## Complete example
+
+<Tabs
+groupId="wgcore"
+defaultValue="rust"
+values={[
+{label: 'main.rs', value: 'rust'},
+{label: 'kernel.wgsl', value: 'wgsl'},
+]}>
+<TabItem value="rust">
+
+```rust
+<load path='https://raw.githubusercontent.com/dimforge/wgmath/refs/heads/main/crates/wgcore/examples/timestamp_queries.rs' />
+```
+
+  </TabItem>
+  <TabItem value="wgsl">
+
+```rust
+<load path='https://raw.githubusercontent.com/dimforge/wgmath/refs/heads/main/crates/wgcore/examples/timestamp_queries.wgsl' />
+```
+
+  </TabItem>
+</Tabs>

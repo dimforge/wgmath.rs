@@ -1,0 +1,65 @@
+---
+id: buffers_readback
+title: Buffers readback
+sidebar_label: Buffers readback
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+:::note
+The code described in this section can be run from the
+[**buffer_readback.rs**](https://github.com/dimforge/wgmath/blob/main/crates/wgcore/examples/buffer_readback.rs) example with
+`cargo run --features derive --example buffer_readback`. Complete source code is also provided at the
+[end of this page](#complete-example).
+:::
+
+After our buffer have been [initialized](./buffers_initialization.mdx), and our compute kernels have run, you might need
+to read the results back to RAM for further processing on the CPU side. Reading the content of a GPU buffers require a
+few steps:
+1. Be sure that the buffer you want to read from was initialized with `BufferUsages::COPY_SRC`:
+```rust
+let buffer_to_read_from = GpuVector::init(
+    gpu.device(),
+    &buffer_data,
+    BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+);
+```
+2. Be sure that a _staging buffer_ was created with `BufferUsages::COPY_DST | BufferUsages::MAP_READ`. This is an
+   intermediate buffer that can be mapped to the CPU-side virtual memory:
+```rust
+let staging_buffer = GpuVector::uninit(
+    gpu.device(),
+    buffer_data.len(),
+    BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+);
+```
+3. Instruct the GPU to copy the content of your buffer into the _staging buffer_:
+```rust
+staging_buffer.copy_from(&mut encoder, &buffer_to_read_from);
+```
+4. Read the staging buffer into a vector of typed values.
+```rust
+let buffer_read_from_gpu = staging.read(gpu.device()).await;
+```
+
+Note that the staging buffer can be uninitialized considering its will never be read before being written to
+by `staging_buffer.copy_from`. The length provided to `GpuVector::uninit` is the number of (typed) elements
+the buffer can contain, not the size in bytes.
+
+## Complete example
+
+<Tabs
+groupId="wgcore"
+defaultValue="rust"
+values={[
+{label: 'main.rs', value: 'rust'},
+]}>
+<TabItem value="rust">
+
+```rust
+<load path='https://raw.githubusercontent.com/dimforge/wgmath/refs/heads/main/crates/wgcore/examples/buffer_readback.rs' />
+```
+
+</TabItem>
+</Tabs>

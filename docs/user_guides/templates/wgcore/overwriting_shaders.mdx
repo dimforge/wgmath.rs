@@ -1,0 +1,69 @@
+---
+id: overwriting_shaders
+title: Overwriting shaders
+sidebar_label: Overwriting shaders
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+:::note
+The code described in this section can be run from the
+[**overwriting_shaders.rs**](https://github.com/dimforge/wgmath/blob/main/crates/wgcore/examples/overwriting_shaders.rs) example with
+`cargo run --features derive --example overwriting_shaders`. Complete source code is also provided at the
+[end of this page](#complete-example).
+:::
+
+It is possible to replace the WGSL sources of any shader by another source file (assuming it exports the same symbols
+and/or compute kernels). This can be useful in particular if you need to inject some special behavior into a particular
+WGSL function, fix a bug, or improve performances, in a shader belonging to a dependency you don’t have control over.
+It can also be used to overwrite any embedded shader with a source file available separately from your executable (for
+example if some of your game shaders are bundled in a separate assets directory).
+
+Given a shader deriving the `Shader` trait with [`derive(Shader)`](./composing_shaders.mdx), overwriting its sources
+only require a single line of code:
+
+```rust
+MyShader::set_wgsl_path("path/to/your/shader.wgsl");
+```
+
+Since this is static method, this will set the wgsl path globally. In order to take this change into account, any
+compute pipeline that was constructed from this shader (or that depends directly or indirectly on this shader) have to
+be re-created; subsequent calls to `Shader::from_device`, as well as any other function provided by the `Shader` trait,
+will automatically take the new path into account. Typically, you would set this path before constructing any compute pipeline.
+
+:::info
+The shader at the path set with `set_wgsl_path` will **not** be embedded in the built executable or library. So be sure
+that the path is always valid relative to wherever your executable will be run. Such shaders will typically be deployed
+alongside the executable in a known path.
+:::
+
+All the overwritten shader paths are registered globally in
+[`wgcore::shader::ShaderRegistry`](https://docs.rs/wgcore/latest/wgcore/shader/struct.ShaderRegistry.html).
+This is essentially a hash-map between a shader type and its overwritten path. Another way to obtain the known path
+for a shader is by calling `Shader::wgsl_path`.
+
+## Complete example
+
+<Tabs
+groupId="wgcore"
+defaultValue="rust"
+values={[
+{label: 'main.rs', value: 'rust'},
+{label: 'kernel.wgsl', value: 'wgsl'},
+]}>
+<TabItem value="rust">
+
+```rust
+<load path='https://raw.githubusercontent.com/dimforge/wgmath/refs/heads/main/crates/wgcore/examples/overwrite.rs' />
+```
+
+  </TabItem>
+  <TabItem value="wgsl">
+
+```rust
+<load path='https://raw.githubusercontent.com/dimforge/wgmath/refs/heads/main/crates/wgcore/examples/overwritten_dependency.wgsl' />
+```
+
+  </TabItem>
+</Tabs>
