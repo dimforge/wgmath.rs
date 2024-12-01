@@ -16,7 +16,7 @@ The code described in this section can be run from the
 
 Hot-reloading lets you edit and apply changes to your WGSL shaders while the application using them is running. This
 enables quick iterations and debugging on existing shaders without needing to rebuild and restart the application.
-When using `wgcore` (and its [`derive(Shader)`](./composing_shaders.mdx)) to associate a `.wgsl` file to a rust struct,
+When using `wgcore` (and its [`derive(Shader)`](./shaders_composition.mdx)) to associate a `.wgsl` file to a rust struct,
 it is possible to benefit from hot-reloading with very little boilerplate:
 
 ```rust
