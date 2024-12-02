@@ -34,7 +34,7 @@ If you can’t derive `bytemuck::Pod` for your own type, consider the [solution 
 it can be passed to `GpuScalar::init`.
 - Any type implementing `AsRef<[T]>` (like `Vec<T>`, `&[T]`, or `DVector` from [`nalgebra`](https://nalgebra.rs) can be
 passed to `GpuVector::init`.
-- Any matrix type, parametrized by `T`, from the [`nalgebra`](https://nalgebra.rs) crate can
+- Any matrix type, parameterized by `T`, from the [`nalgebra`](https://nalgebra.rs) crate can
 be passed to `GpuMatrix::init`.
 
 ```rust
@@ -68,7 +68,7 @@ instead by calling the `::encase` constructor of `GpuScalar/GpuVector/GpuMatrix`
 it can be passed to `GpuScalar::encase`.
 - Any type implementing `AsRef<[T]>` (like `Vec<T>`, `&[T]`, or `DVector` from [`nalgebra`](https://nalgebra.rs) can be
 passed to `GpuVector::encase`.
-- Any matrix type, parametrized by `T`, from the [`nalgebra`](https://nalgebra.rs) crate can
+- Any matrix type, parameterized by `T`, from the [`nalgebra`](https://nalgebra.rs) crate can
 be passed to `GpuMatrix::encase`.
 
 
