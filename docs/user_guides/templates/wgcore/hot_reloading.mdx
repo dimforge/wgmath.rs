@@ -45,7 +45,7 @@ Say you are working on an application’s code (like, for example, one of the ex
 [wgebra](https://github.com/dimforge/wgmath)) using a [cargo patch](https://doc.rust-lang.org/cargo/reference/overriding-dependencies.html).
 Using the code snippet from the previous section, you can leverage hot-reloading on **any** shader, even the ones
 from the local dependencies. The `derive(Shader)` macros will automatically figure out the absolute path of all the
-shaders at compile-time so the can be watched with `Shader::watch_sources`.
+shaders at compile-time so they can be watched with `Shader::watch_sources`.
 
 :::danger
 This automatic detection of shader paths might not work properly if you run your application from a directory that is
@@ -53,8 +53,8 @@ different from the root of the rust workspace it is built from. This is due to s
 that will hopefully be stabilized in future versions of the compiler.
 :::
 
-This won’t work for shaders of a dependency that is not available locally on your machine, since there is no way to
-actual shader file that could be modified (since they are embedded in the library directly). In order to make it work
+This won’t work for shaders of a dependency that is not available locally on your machine, since there is no way that
+the actual shader file could be modified (since they are embedded in the library directly). In order to make it work
 for these shaders, you can [overwrite them](./overwriting_shaders.mdx) with a local version of the shader by specifying
 their path with `Shader::set_wgsl_path`. After their path is overwritten, `Shader::watch_sources` needs to be called
 and hot-reloading will work.
