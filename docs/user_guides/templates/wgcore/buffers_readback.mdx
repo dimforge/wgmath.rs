@@ -15,7 +15,7 @@ The code described in this section can be run from the
 :::
 
 After our buffer have been [initialized](./buffers_initialization.mdx), and our compute kernels have run, you might need
-to read the results back to RAM for further processing on the CPU side. Reading the content of a GPU buffers require a
+to read the results back to RAM for further processing on the CPU side. Reading the content of a GPU buffer require a
 few steps:
 1. Be sure that the buffer you want to read from was initialized with `BufferUsages::COPY_SRC`:
 ```rust

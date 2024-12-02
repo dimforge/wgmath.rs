@@ -72,7 +72,7 @@ let timestamps_read = timestamps.wait_for_results_ms(gpu.device(), gpu.queue());
 ```
 
 Each compute pass requires **2 timestamps** for measuring their runtime: one for when the pass _starts_, and one for when its
-_ends_. The actual runtime of the compute pass is the the difference between the two.
+_ends_. The actual runtime of the compute pass is the difference between the two.
 
 Note that there is currently no way to know which timestamp is related to which compute pass unless you know exactly in
 which order all the calls to `queue.compute_pass` happened: their timestamps will be in the same order.

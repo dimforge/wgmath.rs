@@ -14,7 +14,7 @@ The code described in this section can be run from the
 [end of this page](#complete-example).
 :::
 
-The main feature of `wgcore` is the provide the ability share and compose WGSL shaders easily across crates. Roughly
+The main feature of `wgcore` is the provide the ability to share and compose WGSL shaders easily across crates. Roughly
 speaking, `wgcore` exposes a trait and derive macro for generating the boilerplate needed by
 [`naga-oil`](https://crates.io/crates/naga_oil) for shader composition.
 
@@ -26,7 +26,7 @@ since it’s a regular rust `struct`, it can be exported and used across crates 
 
 Say you have two `.wgsl` shaders, one `dependency.wgsl` exposing a wgsl structure and a mathematical function, and the other
 `kernel.wgsl` defines a compute pipeline entrypoint that calls functions from `dependency.wgsl`. The dependency shader
-contains a nana-oil `#define_import_path` statement indicating it is intended to be imported from other shaders. The
+contains a naga-oil `#define_import_path` statement indicating it is intended to be imported from other shaders. The
 kernel shaders contains an `#import` statement indicating it requires symbols exported by the dependency shader:
 
 <Tabs
@@ -148,7 +148,7 @@ Your output will differ from this one due to various factors like different UUID
 ## Running the kernel
 
 In addition to initializing the compute pipeline, `wgcore` exports some convenient utilities for actually running it.
-First, the input buffers can be initialized easily using the `GpuScalar`, `GpuVector`, `GpuMatrix` wrappers (the all
+First, the input buffers can be initialized easily using the `GpuScalar`, `GpuVector`, `GpuMatrix` wrappers (they all
 initialize and contain a regular wgpu `Buffer`).
 
 ```rust
