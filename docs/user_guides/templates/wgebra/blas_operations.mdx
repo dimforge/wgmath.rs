@@ -1,0 +1,286 @@
+---
+id: blas_operations
+title: Matrix multiplication, BLAS
+sidebar_label: Matrix multiplication, BLAS
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+## Matrix multiplication
+
+WGebra implements matrix-matrix and matrix-vector multiplications. It also supports 3-tensors where each element along
+the third dimensions is seen as an individual matrix. These shaders are designed for large matrices and are not
+composable. Instead, they expose compute pipelines for dispatching the operation to the GPU.
+
+The non-composable shaders are `Gemm` (for matrix-matrix multiplication) and `Gemv` (for matrix-vector multiplication),
+following the well-known BLAS terminology. Each of these shaders actually contain several compute pipelines, also
+providing variants where the left-hand-side matrix is transposed, as well as variants with some work-in-progress
+optimizations.
+
+:::tip Quantized matrices
+WGebra only implements linear algebra on **f32 matrices**. If you are looking for linear algebra on **quantized matrices**,
+(for example for AI), see the [wgml](https://github.com/dimforge/wgml) crate instead.
+:::
+
+<Tabs
+groupId="wgebra"
+defaultValue="gemm"
+values={[
+{label: 'gemm.rs', value: 'gemm'},
+{label: 'gemv.rs', value: 'gemv'},
+]}>
+<TabItem value="gemm">
+
+```rust
+async fn gpu_gemm() {
+    let gpu = GpuInstance::new().await.unwrap();
+    let gemm = super::Gemm::from_device(gpu.device()).unwrap();
+    let shapes = ViewShapeBuffers::new();
+
+    const NROWS: u32 = 256;
+    const NCOLS: u32 = 256;
+
+    /// Create some random matrices using nalgebra.
+    let m1_cpu = DMatrix::<f32>::new_random(NROWS as usize, NCOLS as usize);
+    let m2_cpu = DMatrix::<f32>::new_random(NCOLS as usize, NROWS as usize);
+
+    /// Convert our nalgebra matrices to GPU tensors.
+    let m1 = TensorBuilder::matrix(NROWS, NCOLS, BufferUsages::STORAGE)
+        .build_init(gpu.device(), m1_cpu.as_slice());
+    let m2 = TensorBuilder::matrix(NCOLS, NROWS, BufferUsages::STORAGE)
+        .build_init(gpu.device(), m2_cpu.as_slice());
+    /// GPU matrix that will contain the result.
+    let result =
+        TensorBuilder::matrix(NROWS, NROWS, BufferUsages::STORAGE | BufferUsages::COPY_SRC)
+            .build_init(gpu.device(), lhs_cpu.as_slice());
+    /// Buffer for reading back the operation result into RAM.
+    let staging = TensorBuilder::matrix(
+        NROWS,
+        NROWS,
+        BufferUsages::MAP_READ | BufferUsages::COPY_DST,
+    )
+    .build(gpu.device());
+
+    for variant in [
+        /// m1 * m2
+        GemmVariant::Gemm,
+        /// transpose(m1) * m2
+        GemmVariant::GemmTr,
+        /// m1 * m2 using experimental optimizations.
+        GemmVariant::GemmFast,
+        /// transpose(m1) * m2 using experimental optimizations.
+        GemmVariant::GemmTrFast,
+    ] {
+        let mut encoder = gpu.device().create_command_encoder(&Default::default());
+        let mut pass = encoder.compute_pass("test", None);
+
+        // Dispatch the matrix multiplication operation for running it on the gpu.
+        gemm.dispatch_generic(
+            gpu.device(),
+            &shapes,
+            &mut pass,
+            result.as_embedded_view(),
+            m1.as_embedded_view(),
+            m2.as_embedded_view(),
+            variant,
+        );
+        drop(pass); // Ensure the pass is ended before the encoder is borrowed again.
+
+        staging.copy_from(&mut encoder, &result);
+
+        gpu.queue().submit(Some(encoder.finish()));
+
+        // Read the result and compare with the value computed on the CPU.
+        let gpu_result = staging.read(gpu.device()).await.unwrap();
+        let cpu_result = match variant {
+            GemmVariant::Gemm | GemmVariant::GemmFast => &m1_cpu * &m2_cpu,
+            GemmVariant::GemmTr | GemmVariant::GemmTrFast => m1_cpu.tr_mul(&m2_cpu),
+        };
+
+        let gpu_result = DMatrix::from_vec(NROWS as usize, NROWS as usize, gpu_result);
+        assert_relative_eq!(gpu_result, cpu_result, epsilon = 1.0e-3);
+    }
+}
+```
+  </TabItem>
+
+
+<TabItem value="gemv">
+
+```rust
+async fn gpu_gemv() {
+    let gpu = GpuInstance::new().await.unwrap();
+    let gemv = super::Gemv::from_device(gpu.device()).unwrap();
+    let shapes = ViewShapeBuffers::new();
+
+    const NROWS: u32 = 1024;
+    const NCOLS: u32 = 1024;
+
+    /// Create some random matrices/vectors using nalgebra.
+    let m_cpu = DMatrix::<f32>::new_random(NROWS as usize, NCOLS as usize);
+    let v_cpu = DVector::<f32>::new_random(NCOLS as usize);
+    let lhs_cpu = DVector::<f32>::new_random(NROWS as usize);
+
+    /// Convert our nalgebra matrices/vectors to GPU tensors.
+    let m = TensorBuilder::matrix(NROWS, NCOLS, BufferUsages::STORAGE)
+        .build_init(gpu.device(), m_cpu.as_slice());
+    let v = TensorBuilder::vector(v_cpu.nrows() as u32, BufferUsages::STORAGE)
+        .build_init(gpu.device(), v_cpu.as_slice());
+    /// GPU vector that will contain the result.
+    let result = TensorBuilder::vector(NROWS, BufferUsages::STORAGE | BufferUsages::COPY_SRC)
+        .build_init(gpu.device(), lhs_cpu.as_slice());
+    /// Buffer for reading back the operation result into RAM.
+    let staging = TensorBuilder::vector(NROWS, BufferUsages::MAP_READ | BufferUsages::COPY_DST)
+        .build(gpu.device());
+
+    for variant in [
+        /// m * v
+        GemvVariant::Gemv,
+        /// transpose(m) * v
+        GemvVariant::GemvTr,
+        /// m * v using experimental optimizations.
+        GemvVariant::GemvFast,
+        /// transpose(m) * v using experimental optimizations.
+        GemvVariant::GemvTrFast,
+    ] {
+        let mut encoder = gpu.device().create_command_encoder(&Default::default());
+        let mut pass = encoder.compute_pass("test", None);
+        // Dispatch the matrix multiplication operation for running it on the gpu.
+        gemv.dispatch_generic(gpu.device(), &shapes, &mut pass, &result, &m, &v, variant);
+        drop(pass); // Ensure the pass is ended before the encoder is borrowed again.
+
+        staging.copy_from(&mut encoder, &result);
+
+        gpu.queue().submit(Some(encoder.finish()));
+
+        // Read the result and compare with the value computed on the CPU.
+        let gpu_result = staging.read(gpu.device()).await.unwrap();
+        let cpu_result = match variant {
+            GemvVariant::Gemv | GemvVariant::GemvFast => &m_cpu * &v_cpu,
+            GemvVariant::GemvTr | GemvVariant::GemvTrFast => m_cpu.tr_mul(&v_cpu),
+        };
+
+        approx::assert_relative_eq!(DVector::from(gpu_result), cpu_result, epsilon = 1.0e-3);
+    }
+}
+```
+  </TabItem>
+</Tabs>
+
+## Componentwise operations
+
+The `OpAssign` shader provides componentwise operations between two vectors. The first (left-hand-side) vector is
+overwritten with the result of the operation. This can be used for calculating the **sum** or **difference** of two vectors,
+as well as their **componentwise product**, **division**. It can also be configured so that the first vector is simply overwritten
+with a **copy** of the second vector.
+
+<Tabs
+groupId="wgebra"
+defaultValue="op_assign"
+values={[
+{label: 'op_assign.rs', value: 'op_assign'},
+]}>
+<TabItem value="op_assign">
+
+```rust
+async fn gpu_op_assign() {
+    let ops = [
+        // a += b
+        OpAssignVariant::Add,
+        // a -= b
+        OpAssignVariant::Sub,
+        // a[i] *= b[i]
+        OpAssignVariant::Mul,
+        // a[i] /= b[i]
+        OpAssignVariant::Div,
+        // a = b
+        OpAssignVariant::Copy,
+    ];
+    let gpu = GpuInstance::new().await.unwrap();
+    let shapes = ViewShapeBuffers::new();
+
+    for op in ops {
+        let op_assign = OpAssign::new(gpu.device(), op).unwrap();
+        let mut encoder = gpu.device().create_command_encoder(&Default::default());
+
+        const LEN: u32 = 1757;
+
+        // Generate two random vectors.
+        let v0 = DVector::from_fn(LEN as usize, |i, _| i as f32 + 0.1);
+        let v1 = DVector::from_fn(LEN as usize, |i, _| i as f32 * 10.0 + 0.1);
+        // Convert the vectors to gpu 1-tensors.
+        // Note that `gpu_v0` is the one that will be overwritten with the result of the operation.
+        let gpu_v0 = TensorBuilder::vector(LEN, BufferUsages::STORAGE | BufferUsages::COPY_SRC)
+            .build_init(gpu.device(), v0.as_slice());
+        let gpu_v1 = TensorBuilder::vector(LEN, BufferUsages::STORAGE)
+            .build_init(gpu.device(), v1.as_slice());
+
+        let mut pass = encoder.compute_pass("test", None);
+        op_assign.dispatch(gpu.device(), &shapes, &mut pass, &gpu_v0, &gpu_v1);
+        drop(pass); // Ensure the pass is ended before the encoder is borrowed again.
+
+        gpu.queue().submit(Some(encoder.finish()));
+    }
+}
+```
+  </TabItem>
+</Tabs>
+
+## Vector reductions
+
+The `Reduce` shader provides the calculations combining all the components of a single vector to compute their
+**minimum**, **maximum**, **sum**, **product**, or **squared norm**. The selected operation is specified when
+instantiating the shader with `Reduce::new`.
+
+<Tabs
+groupId="wgebra"
+defaultValue="reductions"
+values={[
+{label: 'reductions.rs', value: 'reductions'},
+]}>
+<TabItem value="reductions">
+
+```rust
+async fn gpu_reduce() {
+    let gpu = GpuInstance::new().await.unwrap();
+    let shapes = ViewShapeBuffers::new();
+
+    let ops = [
+        // The minimum value among all the vector’s elements.
+        ReduceOp::Min,
+        // The maximum value among all the vector’s elements.
+        ReduceOp::Max,
+        // The sum of all the vector’s elements.
+        ReduceOp::Sum,
+        // Squared magnitude of the vector.
+        ReduceOp::SqNorm,
+        // The product of all the vector’s elements.
+        ReduceOp::Prod,
+    ];
+
+    for op in ops {
+        // Instanciate the shader (and compute pipeline) with the desired operation `op`.
+        let reduce = super::Reduce::new(gpu.device(), op).unwrap();
+        let mut encoder = gpu.device().create_command_encoder(&Default::default());
+
+        const LEN: usize = 345;
+        let numbers: DVector<f32> = DVector::new_random(LEN);
+
+        // Convert the vector to a GPU 1-tensor.
+        let vector = TensorBuilder::vector(numbers.len() as u32, BufferUsages::STORAGE)
+            .build_init(gpu.device(), numbers.as_slice());
+        // A single-element tensor that contains the result of the reduction.
+        let result = TensorBuilder::scalar(BufferUsages::STORAGE)
+            .build(gpu.device());
+
+        let mut pass = encoder.compute_pass("test", None);
+        reduce.dispatch(gpu.device(), &shapes, &mut pass, &vector, &result);
+        drop(pass); // Ensure the pass is ended before the encoder is borrowed again.
+
+        gpu.queue().submit(Some(encoder.finish()));
+    }
+}
+```
+  </TabItem>
+</Tabs>

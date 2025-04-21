@@ -1,0 +1,288 @@
+---
+id: matrix_decompositions
+title: Matrix decompositions
+sidebar_label: Matrix decompositions
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+:::warning
+Automatic WGSL docs generation publishable on this website is currently waiting on [wgpu#6364](https://github.com/gfx-rs/wgpu/pull/6364).
+In the meantime, refer to the WGSL sources in the [wgebra repository](https://github.com/dimforge/wgmath/tree/main/crates/wgebra).
+:::
+
+Matrix decomposition is a family of techniques that aim to represent a matrix as
+the product of several matrices. Those factors can either allow more efficient
+operations like inversion or linear system resolution, and might provide some
+insight regarding intrinsic properties of some data to be analysed (e.g. by
+observing singular values, eigenvectors, etc.)
+
+:::info
+**WGebra** implements common matrix decompositions for low-dimensional matrices (currently `mat2x2<f32>`, `mat3x3<f32>`
+and `mat4x4<f32>`). There is no implementation of these decomposition for large matrices yet.
+:::
+
+Decomposition            | Factors                   | Derivable shaders
+-------------------------|---------------------------|--------------
+QR                       | $Q ~ R$                   | `WgQR2`, `WgQR3`, `WgQR4`
+LU with partial pivoting | $P^{-1} ~ L ~ U$          | `WgLU2`, `WgLU3`, `WgLU4`
+Cholesky                 | $L ~ L^*$                 | `WgCholesky2`, `WgCholesky3`, `WgCholesky4`
+Symmetric eigendecomposition | $U ~ \Lambda ~ U^*$   | `WgSymmetricEigen2`, `WgSymmetricEigen3`, `WgSymmetricEigen4`
+SVD (2x2 and 3x3 only)   | $U ~ \Sigma ~ V^*$        | `WgSvd2`, `WgSvd3`
+
+## Cholesky
+
+The Cholesky decomposition of a `n × n` Hermitian Definite Positive (SDP) matrix
+$M$ is composed of a `n × n` lower-triangular matrix $L$ such that $M = LL^*$.
+Where $L^*$ designates the conjugate-transpose of $L$.  If the input matrix is
+not SDP, such a decomposition does not exist and the matrix method
+`.cholesky(...)` returns `None`. Note that the input matrix is interpreted as a
+hermitian matrix. Only its lower-triangular part (including the diagonal) is
+read by the Cholesky decomposition (its strictly upper-triangular is never
+accessed in memory). See [the wikipedia
+article](https://en.wikipedia.org/wiki/Cholesky_decomposition) for further
+details about the Cholesky decomposition.
+
+Typical uses of the Cholesky decomposition include the inversion of SDP
+matrices and resolution of SDP linear systems.
+
+
+<div style={{textAlign: 'center'}}>
+
+![Cholesky decomposition of a 3x3 matrix.](https://nalgebra.rs/assets/images/cholesky-75dc99e2e735888f6626a84cad7e63ca.svg)
+
+</div>
+
+<Tabs
+groupId="wgebra"
+defaultValue="rust"
+values={[
+{label: 'main.rs', value: 'rust'},
+{label: 'your_shader.wgsl', value: 'wgsl'},
+]}>
+<TabItem value="rust">
+
+```rust
+#[derive(Shader)]
+#[shader(derive(WgCholesky3), src = "your_shader.wgsl")]
+struct YourShader;
+
+// Automatically generates a test to check with `cargo test` if `your_shader.wgsl` compiles.
+wgcore::test_shader_compilation!(YourShader);
+```
+
+  </TabItem>
+  <TabItem value="wgsl">
+
+```rust
+#import wgebra::cholesky3 as Chol
+
+// Example of function running the decomposition on a 3x3 matrix.
+fn my_function(m: mat3x3<f32>) {
+    let decomposition = Chol::cholesky(m);
+}
+```
+
+  </TabItem>
+</Tabs>
+
+## QR
+
+The QR decomposition of a general `m × n` matrix $M$ is composed of an `m ×
+min(n, m)` unitary matrix $Q$, and a `min(n, m) × m` upper triangular matrix
+(or upper trapezoidal if $m < n$) $R$ such that $M = QR$. This can be used to
+compute the inverse or a matrix or for solving linear systems. See also [the
+wikipedia article](https://en.wikipedia.org/wiki/QR_decomposition) for further
+details.
+
+<div style={{textAlign: 'center'}}>
+
+![QR decomposition of a 3x3 matrix.](https://nalgebra.rs/assets/images/QR-c637c07671e0b3b667b54e70ea195a67.svg)
+
+</div>
+
+<Tabs
+groupId="wgebra"
+defaultValue="rust"
+values={[
+{label: 'main.rs', value: 'rust'},
+{label: 'your_shader.wgsl', value: 'wgsl'},
+]}>
+<TabItem value="rust">
+
+```rust
+#[derive(Shader)]
+#[shader(derive(WgQR3), src = "your_shader.wgsl")]
+struct YourShader;
+
+// Automatically generates a test to check with `cargo test` if `your_shader.wgsl` compiles.
+wgcore::test_shader_compilation!(YourShader);
+```
+
+  </TabItem>
+  <TabItem value="wgsl">
+
+```rust
+#import wgebra::qr3 as QR
+
+// Example of function running the decomposition on a 3x3 matrix.
+fn my_function(m: mat3x3<f32>) {
+    let decomposition = QR::qr(m);
+}
+```
+
+  </TabItem>
+</Tabs>
+
+## LU with partial pivoting
+
+The LU decomposition of a general `m × n` matrix is composed of a `m × min(n,
+m)` lower triangular matrix $L$ with a diagonal filled with 1, and a `min(n, m)
+× m` upper triangular matrix $U$ such that $M = LU$. This decomposition is
+typically used for solving linear systems, compute determinants, matrix
+inverse, and matrix rank.
+
+WGebra implements `LU` decomposition with partial (row) pivoting which computes additionally
+only one permutation matrix $P$ such that $PM = LU$.
+
+See also [the wikipedia article](https://en.wikipedia.org/wiki/LU_decomposition) for further details.
+
+<div style={{textAlign: 'center'}}>
+
+![LU decomposition of a 3x3 matrix.](https://nalgebra.rs/assets/images/LU-e0e7218e88443b27cfafe74dbb63f28b.svg)
+
+</div>
+
+<Tabs
+groupId="wgebra"
+defaultValue="rust"
+values={[
+{label: 'main.rs', value: 'rust'},
+{label: 'your_shader.wgsl', value: 'wgsl'},
+]}>
+<TabItem value="rust">
+
+```rust
+#[derive(Shader)]
+#[shader(derive(WgLU3), src = "your_shader.wgsl")]
+struct YourShader;
+
+// Automatically generates a test to check with `cargo test` if `your_shader.wgsl` compiles.
+wgcore::test_shader_compilation!(YourShader);
+```
+
+  </TabItem>
+  <TabItem value="wgsl">
+
+```rust
+#import wgebra::lu3 as LU
+
+// Example of function running the decomposition on a 3x3 matrix.
+fn my_function(m: mat3x3<f32>) {
+    let decomposition = LU::lu(m);
+}
+```
+
+  </TabItem>
+</Tabs>
+
+## Eigendecomposition (symmetric matrix)
+
+The eigendecomposition of a square symmetric matrix $M$ is composed of an
+unitary matrix $Q$ and a real diagonal matrix $\Lambda$ such that $M = Q\Lambda
+Q^*$. The columns of $Q$ are called the _eigenvectors_ of $M$ and the diagonal
+elements of $\Lambda$ its _eigenvalues_.
+
+The matrix $Q$ and the eigenvalues of the decomposed matrix are respectively
+accessible as public the fields `eigenvectors` and `eigenvalues` of the
+`SymmetricEigen` structure.
+
+<div style={{textAlign: 'center'}}>
+
+![Eigendecomposition of a 3x3 symmetric matrix.](https://nalgebra.rs/assets/images/symmetric_eigen-63031cc3f1a7d8e57497b26c16041f0b.svg)
+
+</div>
+
+<Tabs
+groupId="wgebra"
+defaultValue="rust"
+values={[
+{label: 'main.rs', value: 'rust'},
+{label: 'your_shader.wgsl', value: 'wgsl'},
+]}>
+<TabItem value="rust">
+
+```rust
+#[derive(Shader)]
+#[shader(derive(WgSymmetricEigen3), src = "your_shader.wgsl")]
+struct YourShader;
+
+// Automatically generates a test to check with `cargo test` if `your_shader.wgsl` compiles.
+wgcore::test_shader_compilation!(YourShader);
+```
+
+  </TabItem>
+  <TabItem value="wgsl">
+
+```rust
+#import wgebra::eig3 as Eig
+
+// Example of function running the decomposition on a 3x3 matrix.
+fn my_function(m: mat3x3<f32>) {
+    let decomposition = Eig::symmetric_eigen(m);
+}
+```
+
+  </TabItem>
+</Tabs>
+
+## Singular Value Decomposition
+
+The Singular Value Decomposition (SVD) of a rectangular matrix is composed
+of two orthogonal matrices $U$ and $V$ and a diagonal matrix $\Sigma$ with positive
+(or zero) components. Typical uses of the SVD are the pseudo-inverse, rank
+computation, and the resolution of least-square problems.
+
+The singular values, left singular vectors, and right singular vectors are
+respectively stored on the public fields `singular_values`, `u` and `v_t`. Note
+that `v_t` represents the adjoint (i.e. conjugate-transpose) of the matrix $V$.
+
+<div style={{textAlign: 'center'}}>
+
+![SVD decomposition of a 3x3 matrix.](https://nalgebra.rs/assets/images/SVD-a3b626297ee186a529a2f3c3284eca21.svg)
+
+</div>
+
+<Tabs
+groupId="wgebra"
+defaultValue="rust"
+values={[
+{label: 'main.rs', value: 'rust'},
+{label: 'your_shader.wgsl', value: 'wgsl'},
+]}>
+<TabItem value="rust">
+
+```rust
+#[derive(Shader)]
+#[shader(derive(WgSvd3), src = "your_shader.wgsl")]
+struct YourShader;
+
+// Automatically generates a test to check with `cargo test` if `your_shader.wgsl` compiles.
+wgcore::test_shader_compilation!(YourShader);
+```
+
+  </TabItem>
+  <TabItem value="wgsl">
+
+```rust
+#import wgebra::svd3 as Svd
+
+// Example of function running the decomposition on a 3x3 matrix.
+fn my_function(m: mat3x3<f32>) {
+    let decomposition = Svd::svd(m);
+}
+```
+
+  </TabItem>
+</Tabs>

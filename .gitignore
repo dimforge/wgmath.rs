@@ -34,5 +34,8 @@ build
 
 # Ignore these because they are generated automatically from docs/user_guides/templates
 docs/user_guides/wgcore
+docs/user_guides/wgebra
+docs/user_guides/wgparry
+docs/user_guides/wgrapier
 docs/user_guides/templates_injected
 tmp_*

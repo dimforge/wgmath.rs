@@ -85,12 +85,12 @@ const config = {
         },
         footer: {
             style: 'dark',
-            logo: {
-                alt: 'Dimforge EURL Logo',
-                src: 'https://www.dimforge.com/img/logo/logo_dimforge_small_rect.svg',
-                href: 'https://www.dimforge.com/'
-            },
-            copyright: `Built by <a href="https://www.dimforge.com">Dimforge, EURL</a>.`,
+            // logo: {
+            //     alt: 'Dimforge EURL Logo',
+            //     src: 'https://www.dimforge.com/img/logo/logo_dimforge_small_rect.svg',
+            //     href: 'https://www.dimforge.com/'
+            // },
+            // copyright: `Built by <a href="https://www.dimforge.com">Dimforge, EURL</a>.`,
             links: [
                 // {
                 //     title: 'Resources',
