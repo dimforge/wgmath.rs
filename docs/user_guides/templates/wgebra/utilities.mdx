@@ -1,0 +1,105 @@
+---
+id: utilities
+title: Utilities
+sidebar_label: Utilities
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+:::warning
+Automatic WGSL docs generation publishable on this website is currently waiting on [wgpu#6364](https://github.com/gfx-rs/wgpu/pull/6364).
+In the meantime, refer to the WGSL sources in the [wgebra repository](https://github.com/dimforge/wgmath/tree/main/crates/wgebra).
+:::
+
+WGebra provides a few utilities that are generally useful in mathematical code but are missing from the WebGPU standard.
+
+## Component reductions
+
+Calculating the minimum or maximum element of a `vec2`, `vec3`, `vec4`, `mat2x2`, `mat3x3`, `mat4x4` is rather verbose
+with vanilla WGSL code. The `WgMinMax` composable shader exposes functions for computing it in your shader:
+
+<Tabs
+groupId="wgebra"
+defaultValue="rust"
+values={[
+{label: 'main.rs', value: 'rust'},
+{label: 'your_shader.wgsl', value: 'wgsl'},
+]}>
+<TabItem value="rust">
+
+```rust
+#[derive(Shader)]
+#[shader(derive(WgMinMax), src = "your_shader.wgsl")]
+struct YourShader;
+
+// Automatically generates a test to check with `cargo test` if `your_shader.wgsl` compiles.
+wgcore::test_shader_compilation!(YourShader);
+```
+
+  </TabItem>
+  <TabItem value="wgsl">
+
+```rust
+#import wgebra::min_max as MM
+
+// Dummy function that calls all the supported component mins or maxes for matrices,
+// from the `min_max` module (imported as `MM` here).
+fn compute_all_min_maxes(a: mat2x2<f32>, b: mat3x3<f32>, c: mat4x4<f32>) {
+    let all_mins = vec3(MM::min2x2(a), MM::min3x3(b), MM::min4x4(c));
+    let all_abs_mins = vec3(MM::amin2x2(a), MM::amin3x3(b), MM::amin4x4(c));
+    let all_maxs = vec3(MM::max2x2(a), MM::max3x3(b), MM::max4x4(c));
+    let all_abs_maxs = vec3(MM::amax2x2(a), MM::amax3x3(b), MM::amax4x4(c));
+    // TODO: do something with all that.
+}
+```
+
+  </TabItem>
+</Tabs>
+
+
+## Stable tangents
+
+In some platforms (especially Metal/MacOS) provide numerically unstable implementations of some trigonometric functions,
+potentially leading to NaNs for some edge-cases. The `WgTrig` module exposes implementations of `tanh` and `atan2` that
+will be more numerically stable across platforms.
+
+<Tabs
+groupId="wgebra"
+defaultValue="rust"
+values={[
+{label: 'main.rs', value: 'rust'},
+{label: 'your_shader.wgsl', value: 'wgsl'},
+]}>
+<TabItem value="rust">
+
+```rust
+#[derive(Shader)]
+#[shader(derive(WgTrig), src = "your_shader.wgsl")]
+struct YourShader;
+
+// Automatically generates a test to check with `cargo test` if `your_shader.wgsl` compiles.
+wgcore::test_shader_compilation!(YourShader);
+```
+
+  </TabItem>
+  <TabItem value="wgsl">
+
+```rust
+#import wgebra::trig as Trig
+
+// Dummy function that calls some edge-cases for trigonometric functions that
+// are not well handled on Metal.
+fn compute_edge_cases() {
+    // This would have returned NaN on Metal, instead of a value close to 1.
+    // See https://github.com/apache/tvm/pull/16438
+    let tan_large_value = Trig::stable_tanh(46.0);
+    // This would return NaN on Metal. The Trig module will return 0 on unbounded cases instead.
+    // See https://github.com/gfx-rs/wgpu/issues/4319
+    let atan_edge_case = Trig::stable_atan2(0.0, 0.0);
+}
+```
+
+  </TabItem>
+</Tabs>
+

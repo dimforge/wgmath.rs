@@ -1,0 +1,203 @@
+---
+id: geometric_transformations
+title: Geometric transformations
+sidebar_label: Geometric transformations
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+:::warning
+Automatic WGSL docs generation publishable on this website is currently waiting on [wgpu#6364](https://github.com/gfx-rs/wgpu/pull/6364).
+In the meantime, refer to the WGSL sources in the [wgebra repository](https://github.com/dimforge/wgmath/tree/main/crates/wgebra).
+:::
+
+Most compute kernels for geometry, physics, robotics, games, etc. rely on some form of geometric transformations. While
+the WGSL specification gives access to raw transformation matrices through `mat2x2`, `mat3x3`, and `mat4x4`, these are
+both difficult to initialize and to use in practice is it is lacking utility functions to manipulate them.
+
+WGebra defines strongly typed transformations for ergonomic and efficient handling of common transformations: rotations
+(as complex numbers or quaternions) and similarities.
+
+:::note
+There is no strongly typed isometries. Use similarities with a scaling factor of 1 instead.
+:::
+
+## Rotations
+
+Using a `mat2x2` or `mat3x3` for representing a 2D or 3D rotation is both wasteful in terms of memory usage, as well as
+inefficient when it comes to operations like inversion. The `WgRot2` and `WgQuat` composable shaders expose reusable
+WGSL types and functions for representing and handling these rotations as a complex number (i.e. 2 floats) in 2D, or
+a quaternion (i.e. 4 floats) in 3D.
+
+### 2D rotations example
+
+<Tabs
+groupId="wgebra"
+defaultValue="rust"
+values={[
+{label: 'main.rs', value: 'rust'},
+{label: 'your_shader.wgsl', value: 'wgsl'},
+]}>
+<TabItem value="rust">
+
+```rust
+#[derive(Shader)]
+#[shader(derive(WgRot2), src = "your_shader.wgsl")]
+struct YourShader;
+
+// Automatically generates a test to check with `cargo test` if `your_shader.wgsl` compiles.
+wgcore::test_shader_compilation!(YourShader);
+```
+
+  </TabItem>
+  <TabItem value="wgsl">
+
+```rust
+#import wgebra::rot2 as R
+
+@group(0) @binding(0)
+var<storage, read_write> test_q1: array<R::Rot2>;
+@group(0) @binding(1)
+var<storage, read_write> test_q2: array<R::Rot2>;
+@group(0) @binding(2)
+var<storage, read_write> test_v1: array<vec3<f32>>;
+@group(0) @binding(3)
+var<storage, read_write> test_v2: array<vec3<f32>>;
+@group(0) @binding(4)
+var<storage, read_write> test_id: R::Rot2;
+
+@compute @workgroup_size(1, 1, 1)
+fn test(@builtin(global_invocation_id) invocation_id: vec3<u32>) {
+    let i = invocation_id.x;
+    test_v1[i] = R::mulVec(test_q1[i], test_v1[i]);
+    test_v2[i] = R::invMulVec(test_q2[i],test_v2[i]);
+    test_q1[i] = R::mul(test_q1[i], test_q2[i]);
+    test_q2[i] = R::inv(test_q2[i]);
+
+    if i == 0 {
+        test_id = R::identity();
+    }
+}
+```
+
+  </TabItem>
+</Tabs>
+
+### Quaternion example
+
+<Tabs
+groupId="wgebra"
+defaultValue="rust"
+values={[
+{label: 'main.rs', value: 'rust'},
+{label: 'your_shader.wgsl', value: 'wgsl'},
+]}>
+<TabItem value="rust">
+
+```rust
+#[derive(Shader)]
+#[shader(derive(WgQuat), src = "your_shader.wgsl")]
+struct YourShader;
+
+// Automatically generates a test to check with `cargo test` if `your_shader.wgsl` compiles.
+wgcore::test_shader_compilation!(YourShader);
+```
+
+  </TabItem>
+  <TabItem value="wgsl">
+
+```rust
+#import wgebra::quat as Q
+
+@group(0) @binding(0)
+var<storage, read_write> test_q1: array<Q::Quat>;
+@group(0) @binding(1)
+var<storage, read_write> test_q2: array<Q::Quat>;
+@group(0) @binding(2)
+var<storage, read_write> test_v1: array<vec3<f32>>;
+@group(0) @binding(3)
+var<storage, read_write> test_v2: array<vec3<f32>>;
+@group(0) @binding(4)
+var<storage, read_write> test_id: Q::Quat;
+
+@compute @workgroup_size(1, 1, 1)
+fn test(@builtin(global_invocation_id) invocation_id: vec3<u32>) {
+    let i = invocation_id.x;
+    test_v1[i] = Q::mulVec(test_q1[i], test_v1[i]);
+    test_v2[i] = Q::invMulVec(test_q2[i],test_v2[i]);
+    test_q1[i] = Q::mul(test_q1[i], test_q2[i]);
+    test_q2[i] = Q::inv(test_q2[i]);
+
+    if i == 0 {
+        test_id = Q::identity();
+    }
+}
+```
+
+  </TabItem>
+</Tabs>
+
+## Similarities
+
+Similarities are transformations representing a uniform scaling factor, followed by a rotation, followed by a
+translation. They are a superset of isometries for which the scaling factor is always 1.
+
+
+<Tabs
+groupId="wgebra"
+defaultValue="rust"
+values={[
+{label: 'main.rs', value: 'rust'},
+{label: 'your_shader.wgsl', value: 'wgsl'},
+]}>
+<TabItem value="rust">
+
+```rust
+#[derive(Shader)]
+#[shader(derive(WgSim3), src = "your_shader.wgsl")]
+struct YourShader;
+
+// Automatically generates a test to check with `cargo test` if `your_shader.wgsl` compiles.
+wgcore::test_shader_compilation!(YourShader);
+```
+
+  </TabItem>
+  <TabItem value="wgsl">
+
+```rust
+#import wgebra::sim3 as Sim
+
+@group(0) @binding(0)
+var<storage, read_write> test_s1: array<Sim::Sim3>;
+@group(0) @binding(1)
+var<storage, read_write> test_s2: array<Sim::Sim3>;
+@group(0) @binding(2)
+var<storage, read_write> test_p1: array<vec3<f32>>;
+@group(0) @binding(3)
+var<storage, read_write> test_p2: array<vec3<f32>>;
+@group(0) @binding(4)
+var<storage, read_write> test_v1: array<vec3<f32>>;
+@group(0) @binding(5)
+var<storage, read_write> test_v2: array<vec3<f32>>;
+@group(0) @binding(6)
+var<storage, read_write> test_id: Sim::Sim3;
+
+@compute @workgroup_size(1, 1, 1)
+fn test(@builtin(global_invocation_id) invocation_id: vec3<u32>) {
+    let i = invocation_id.x;
+    test_p1[i] = Sim::mulPt(test_s1[i], test_p1[i]);
+    test_p2[i] = Sim::invMulPt(test_s2[i],test_p2[i]);
+    test_v1[i] = Sim::mulVec(test_s1[i], test_v1[i]);
+    test_v2[i] = Sim::invMulVec(test_s2[i],test_v2[i]);
+    test_s1[i] = Sim::mul(test_s1[i], test_s2[i]);
+    test_s2[i] = Sim::inv(test_s2[i]);
+
+    if i == 0 {
+        test_id = Sim::identity();
+    }
+}
+```
+
+  </TabItem>
+</Tabs>
